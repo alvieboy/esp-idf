@@ -171,7 +171,11 @@ static esp_err_t httpd_server(struct httpd_data *hd)
     maxfd = MAX(hd->ctrl_fd, tmp_max_fd);
 
     ESP_LOGD(TAG, LOG_FMT("doing select maxfd+1 = %d"), maxfd + 1);
-    int active_cnt = select(maxfd + 1, &read_set, NULL, NULL, NULL);
+    int active_cnt;
+    do {
+        active_cnt = select(maxfd + 1, &read_set, NULL, NULL, NULL);
+    } while (active_cnt <0 && (errno==EINTR));
+
     if (active_cnt < 0) {
         ESP_LOGE(TAG, LOG_FMT("error in select (%d)"), errno);
         httpd_sess_delete_invalid(hd);
@@ -378,7 +382,6 @@ esp_err_t httpd_start(httpd_handle_t *handle, const httpd_config_t *config)
                       CONFIG_LWIP_MAX_SOCKETS - 3);
         return ESP_ERR_INVALID_ARG;
     }
-
     struct httpd_data *hd = httpd_create(config);
     if (hd == NULL) {
         /* Failed to allocate memory */
@@ -391,6 +394,7 @@ esp_err_t httpd_start(httpd_handle_t *handle, const httpd_config_t *config)
     }
 
     httpd_sess_init(hd);
+
     if (httpd_os_thread_create(&hd->hd_td.handle, "httpd",
                                hd->config.stack_size,
                                hd->config.task_priority,
