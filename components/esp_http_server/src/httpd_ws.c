@@ -249,11 +249,28 @@ esp_err_t httpd_ws_recv_frame(httpd_req_t *req, httpd_ws_frame_t *frame, size_t 
         return ESP_FAIL;
     }
 
-    if (httpd_recv_with_opt(req, (char *)frame->payload, frame->len, false) <= 0) {
-        ESP_LOGW(TAG, LOG_FMT("Failed to receive payload"));
-        return ESP_FAIL;
+    {
+        char *dest = (char*)frame->payload;
+        int rlen = frame->len;
+        do {
+            if (rlen!=frame->len) {
+                ESP_LOGW(TAG, LOG_FMT("Performing short read %d"), rlen);
+            }
+            int received = httpd_recv_with_opt(req, dest, rlen, true);
+            if (rlen!=frame->len) {
+                ESP_LOGW(TAG, LOG_FMT("Short read ret %d"), received);
+            }
+            if (received <= 0) {
+                ESP_LOGW(TAG, LOG_FMT("Failed to receive payload"));
+                return ESP_FAIL;
+            }
+            rlen -= received;
+            dest += received;
+            if (rlen>0) {
+                ESP_LOGW(TAG, LOG_FMT("Short payload %d %d"), rlen, received);
+            }
+        } while (rlen>0);
     }
-
     /* Unmask payload */
     httpd_ws_unmask_payload(frame->payload, frame->len, mask_key);
 
